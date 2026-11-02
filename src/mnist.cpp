@@ -109,6 +109,42 @@ array<uint32_t,2> load_labels(const string fileName, vector<uint8_t>& label_buff
 }
 
 
+vector<float> normalize_image_pixels(const vector<uint8_t>& pixel_buffer){
+    float max_val = 255.0f;
+
+    vector<float> normalized(pixel_buffer.size());
+
+    for(size_t i=0;i<pixel_buffer.size();i++){
+        // float temp = pixel_buffer
+        normalized[i] = pixel_buffer[i]/max_val;
+    }
+
+    return normalized;
+}
+
+
+void print_ascii(const vector<uint8_t>& pixel_buffer, const uint32_t num_images, 
+    const uint32_t rows, const uint32_t cols){
+
+    //pass num_images <5 for now, no need to print all the images there are
+
+    string ramp = " .:-=+*#%@";
+
+    for(int i=0;i<(int)num_images;i++){
+        cout<<"image "<<i<<":"<<endl;
+        for(int r=0;r<(int)rows;r++){
+            for(int c=0;c<(int)cols;c++){
+                int idx = (i * rows * cols) + (r * cols) + c;
+                // cout<<stuff[idx]<<" ";
+                
+                size_t shade = pixel_buffer[idx] * (ramp.size() - 1)/255;
+                cout<<ramp[shade]<<ramp[shade];
+            }
+            cout<<endl; //one image ends?
+        }
+        cout<<endl<<endl;
+    }
+}
 
 
 
