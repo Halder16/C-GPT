@@ -32,6 +32,19 @@ vector<float> vector_add(const vector<float>& a, const vector<float>& b){
     return res;
 }
 
+vector<float> vector_subtract(const vector<float>& a, const vector<float>& b) {
+    if (a.size() != b.size()) {
+        throw invalid_argument("Vector sizes must match");
+    }
+
+    vector<float> result(a.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        result[i] = a[i] - b[i];
+    }
+
+    return result;
+}
+
 vector<float> vector_scale(const vector<float>& a, float f){
     vector<float> res;
     for(auto e:a){
