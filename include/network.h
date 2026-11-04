@@ -7,6 +7,7 @@
 
 #include "./math_functions.h"
 #include "./ml_functions.h"
+#include "./mnist.h"
 
 using std::vector;
 using std::random_device;
@@ -48,6 +49,11 @@ public:
     ForwardCache forward_prop(const vector<float>& X);
     vector<int> one_hot(const vector<float>& Y);
     Gradients backward_prop(const vector<float>& X, const ForwardCache& cache, int correct_label);
+    void update_weights(Gradients& cache, const float alpha);
+    void gradient_descent(const vector<Train_data>& train_data, const float alpha, 
+        const int num_epochs, const vector<Train_data>& val_data);
+    int predict(const vector<float>& X);
+    float get_accuracy(const vector<Train_data>& dataset);
 };
 
 

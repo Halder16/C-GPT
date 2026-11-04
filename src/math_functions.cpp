@@ -127,3 +127,8 @@ vector<float> mat_vec_mult(
 
     return result;
 }
+
+
+int argmax(const vector<float>& v){
+    return max_element(v.begin(), v.end()) - v.begin();
+}

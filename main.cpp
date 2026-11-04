@@ -15,19 +15,20 @@ void run_tests(){
 }
 
 int main(){
-    //
+    //train
+    string trainImgFilename = "./archive/train-images-idx3-ubyte/train-images-idx3-ubyte";
+    string trainLabelFilename = "./archive/train-labels-idx1-ubyte/train-labels-idx1-ubyte";
+
+    //val
+    string valImgFilename = "./archive/t10k-images-idx3-ubyte/t10k-images-idx3-ubyte";
+    string valLabelFilename = "./archive/t10k-labels-idx1-ubyte/t10k-labels-idx1-ubyte";
+
+
+    auto train_data = get_data(trainImgFilename, trainLabelFilename);
+    auto val_data = get_data(valImgFilename, valLabelFilename);
+
     NeuralNetwork nn;
-    vector<float> image(784, 0.5f); // Example input
-    vector<float> predictions = nn.forward_prop(image);
-
-    int digit = max_element(
-        predictions.begin(),
-        predictions.end()
-    ) - predictions.begin();
-
-    cout << "Predicted digit: " << digit << endl;
-    cout<<predictions.size()<<endl;
-    cout<<accumulate(predictions.begin(), predictions.end(),0.0f)<<endl;
+    nn.gradient_descent(train_data, 0.01f, 100, val_data);
 
     return 0;
 }

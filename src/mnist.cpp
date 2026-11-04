@@ -19,6 +19,7 @@ uint32_t swap_endian(uint32_t val) {
 }
 
 
+
 array<uint32_t,4> load_images(const string fileName, vector<uint8_t>& pixel_buffer){
     //this works, i think
 
@@ -68,6 +69,8 @@ array<uint32_t,4> load_images(const string fileName, vector<uint8_t>& pixel_buff
     return {magic_number, num_images, rows, cols};
 }
 
+
+
 array<uint32_t,2> load_labels(const string fileName, vector<uint8_t>& label_buffer){
     //
 
@@ -93,8 +96,8 @@ array<uint32_t,2> load_labels(const string fileName, vector<uint8_t>& label_buff
 
     num_labels = swap_endian(num_labels);
 
-    cout << "Label Magic Number: " << magic_number << endl;
-    cout << "Total Labels: " << num_labels << endl;
+    // cout << "Label Magic Number: " << magic_number << endl;
+    // cout << "Total Labels: " << num_labels << endl;
 
     label_buffer.resize(num_labels);
 
@@ -123,6 +126,7 @@ vector<float> normalize_image_pixels(const vector<uint8_t>& pixel_buffer){
 }
 
 
+
 void print_ascii(const vector<uint8_t>& pixel_buffer, const uint32_t num_images, 
     const uint32_t rows, const uint32_t cols){
 
@@ -145,6 +149,62 @@ void print_ascii(const vector<uint8_t>& pixel_buffer, const uint32_t num_images,
         cout<<endl<<endl;
     }
 }
+
+
+
+vector<Train_data> get_data(const string imgFilename, const string labelFilename){
+    //
+    vector<uint8_t> pixel_buffer;
+    auto [magic_number, num_images, rows, cols] = load_images(imgFilename, pixel_buffer);
+
+    //sanity check?
+    if(magic_number == 0){
+        cerr<<"Failed to load given image directory."<<endl;
+        return{};
+    }
+
+    vector<uint8_t> label_buffer;
+    auto [magic_number1, num_labels] = load_labels(labelFilename, label_buffer);
+
+    //sanity check, again
+    if(magic_number1 == 0){
+        cerr<<"Failed to load given label directory."<<endl;
+        return{};
+    }
+
+    if((int)num_images != (int)num_labels){
+        cerr<<"ouchie! image and label count mismatch."<<endl;
+        return{};
+    }
+
+    vector<float> normalized_pixels_buffer = normalize_image_pixels(pixel_buffer);
+
+    vector<vector<float>> images(num_images, vector<float> (rows*cols));
+    
+    for(size_t i=0;i<num_images;i++){
+        for(size_t r=0;r<rows;r++){
+            for(size_t c=0;c<cols;c++){
+                int idx = (i * rows * cols) + (r * cols) + c;
+                images[i][r*cols + c] = normalized_pixels_buffer[idx];
+            }
+        }
+    }
+
+    vector<Train_data> batch(num_images);
+
+    for(size_t i=0;i<num_images;i++){
+        Train_data t_dat;
+        t_dat.image = images[i];
+        t_dat.label = (int)label_buffer[i];
+
+        batch[i] = t_dat;
+    }
+
+    return batch;
+}
+
+
+
 
 
 
