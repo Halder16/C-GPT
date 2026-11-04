@@ -32,3 +32,13 @@ int main(){
 
     return 0;
 }
+
+
+/*
+TODO: add the capability to add more layers, and for the 
+neural network to handle them dynamically (buzzword alert!) 
+instead of hardcoding the layer operations. 
+
+That way, you could easily build models with 
+different layers and test them
+*/
