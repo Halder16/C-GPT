@@ -28,6 +28,11 @@ int main(){
     auto val_data = get_data(valImgFilename, valLabelFilename);
 
     NeuralNetwork nn;
+    nn.add_layer(784, 128);
+    nn.add_layer(64);
+    nn.add_layer(32);
+    nn.add_layer(10);
+
     nn.gradient_descent(train_data, 0.01f, 100, val_data);
 
     return 0;

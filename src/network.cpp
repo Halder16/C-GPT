@@ -42,10 +42,36 @@ Layer create_layer(const int input_size, const int out_size){
 }
 
 
+void NeuralNetwork::add_layer(int output_size){
+    if (layers.empty()) {
+        throw invalid_argument("First layer needs explicit input_size. Use add_layer(input_size, output_size)");
+    }
+    int input_size = layer_sizes.back();  // Previous layer's output
+    layers.push_back(create_layer(input_size, output_size));
+    layer_sizes.push_back(output_size);
+}
 
-NeuralNetwork::NeuralNetwork(){
-    hidden = create_layer(784, 128);
-    output = create_layer(128, 10);
+
+
+void NeuralNetwork::add_layer(int input_size, int output_size) {
+    if (!layers.empty() && input_size != layer_sizes.back()) {
+        throw invalid_argument("Input size must match previous layer's output size");
+    }
+    layers.push_back(create_layer(input_size, output_size));
+    layer_sizes.push_back(output_size);
+}
+
+
+
+NeuralNetwork::NeuralNetwork(const vector<int>& layer_sizes_) {
+    if (layer_sizes_.size() < 2) {
+        throw invalid_argument("Need at least input and output sizes");
+    }
+    layer_sizes = layer_sizes_;
+    
+    for (size_t i = 1; i < layer_sizes.size(); ++i) {
+        layers.push_back(create_layer(layer_sizes[i-1], layer_sizes[i]));
+    }
 }
 
 
@@ -69,25 +95,34 @@ vector<float> NeuralNetwork::apply_relu(const vector<float>& values){
 
 
 ForwardCache NeuralNetwork::forward_prop(const vector<float>& X){
-    //
-    if (X.size() != 784) {
-        throw invalid_argument("Expected 784 input values");
+    if (X.size() != layers[0].weights[0].size()) {  // First layer's input size
+        throw invalid_argument("Input size mismatch");
     }
 
-    //hidden layer,
-    vector<float> Z1 = mat_vec_mult(hidden.weights, X);
-    Z1 = add_bias(Z1, hidden.biases);
+    ForwardCache cache;
+    cache.a.push_back(X); //a[0]
 
-    vector<float> A1 = apply_relu(Z1);
 
-    //output layer,
-    vector<float> Z2 = mat_vec_mult(output.weights, A1);
-    Z2 = add_bias(Z2, output.biases);
+    for(size_t i=0;i<layers.size();i++){
+        const Layer& layer = layers[i];
 
-    //predictions,
-    vector<float> A2 = softmax(Z2);
+        // Linear z = W*a_prev + b
+        vector<float> z = mat_vec_mult(layer.weights, cache.a.back());
+        z = add_bias(z, layer.biases);
+        cache.z.push_back(z);
 
-    return {Z1, A1, Z2, A2};
+        //activation
+        vector<float> a;
+        if(i==layers.size()-1){ //output layer
+            a = softmax(z);
+        }else{
+            a = apply_relu(z); //hidden layer
+        }
+        cache.a.push_back(a);
+    }
+
+    return cache;
+
 }
 
 
@@ -117,47 +152,38 @@ vector<int> NeuralNetwork::one_hot(const vector<float>& Y){
 
 
 Gradients NeuralNetwork::backward_prop(const vector<float>& X, const ForwardCache& cache, int correct_label){
-    if (X.size() != hidden.weights[0].size()) {
-        throw invalid_argument("Expected 784 input values");
-    }
-    if (cache.z1.size() != hidden.weights.size() ||
-        cache.a1.size() != hidden.weights.size() ||
-        cache.z2.size() != output.weights.size() ||
-        cache.a2.size() != output.weights.size()) {
-        throw invalid_argument("Forward cache dimensions do not match the network");
-    }
-    if (correct_label < 0 || correct_label >= static_cast<int>(cache.a2.size())) {
-        throw invalid_argument("Correct label must be between 0 and 9");
-    }
-
     Gradients grads;
+    grads.dW.resize(layers.size());
+    grads.db.resize(layers.size());
 
-    // Softmax with cross-entropy: dZ2 = A2 - one_hot(correct_label).
-    vector<float> dZ2 = cache.a2;
-    dZ2[correct_label] -= 1.0f;
+    int num_layers = layers.size();
+    int num_classes = layers.back().weights.size(); //output layer size
 
-    // One image means m = 1, so no averaging is needed.
-    grads.dW2.resize(dZ2.size(), vector<float>(cache.a1.size()));
-    for (size_t i = 0; i < dZ2.size(); ++i) {
-        for (size_t j = 0; j < cache.a1.size(); ++j) {
-            grads.dW2[i][j] = dZ2[i] * cache.a1[j];
+    vector<float> dZ = cache.a.back(); // a[L] = output activations
+    dZ[correct_label] -= 1.0f; // dL/dZ = A - Y_one_hot
+
+    //backprop in reverse
+    for(int i=num_layers-1;i>=0;i--){
+        const vector<float>& a_prev = cache.a[i]; //input to this layer
+
+        //dW = dZ*a_prev^T
+        grads.dW[i].resize(dZ.size(), vector<float>(a_prev.size()));
+        for(size_t row=0;row<dZ.size();row++){
+            for(size_t col=0;col<a_prev.size();col++){
+                grads.dW[i][row][col] = dZ[row]*a_prev[col];
+            }
+        }
+        grads.db[i] = dZ; //since bias added directly
+
+        if(i>0){
+            //dZ_prev = W-curr^T * dZ * relu'(z_prev)
+            vector<float> dZ_prev = mat_vec_mult(mat_transpose(layers[i].weights), dZ);
+            for(size_t j=0;j<dZ_prev.size();j++){
+                dZ_prev[j] *= relu_derivative(cache.z[i-1][j]);
+            }
+            dZ = std::move(dZ_prev);
         }
     }
-    grads.db2 = dZ2;
-
-    vector<float> dZ1 = mat_vec_mult(mat_transpose(output.weights), dZ2);
-    for (size_t i = 0; i < dZ1.size(); ++i) {
-        dZ1[i] *= relu_derivative(cache.z1[i]);
-    }
-
-    grads.dW1.resize(dZ1.size(), vector<float>(X.size()));
-    for (size_t i = 0; i < dZ1.size(); ++i) {
-        for (size_t j = 0; j < X.size(); ++j) {
-            grads.dW1[i][j] = dZ1[i] * X[j];
-        }
-    }
-    grads.db1 = dZ1;
-
     return grads;
 }
 
@@ -170,24 +196,17 @@ void NeuralNetwork::update_weights(Gradients& grads, const float alpha){
     // W2 = W2 - alpha * dW2  
     // b2 = b2 - alpha * db2 
 
-    for(size_t i=0;i<hidden.weights.size();i++){
-        for(size_t j=0;j<hidden.weights[0].size();j++){
-            hidden.weights[i][j] -= alpha*grads.dW1[i][j];
+    for (size_t i = 0; i < layers.size(); ++i) {
+        // W = W - alpha * dW
+        for (size_t r = 0; r < layers[i].weights.size(); ++r) {
+            for (size_t c = 0; c < layers[i].weights[r].size(); ++c) {
+                layers[i].weights[r][c] -= alpha * grads.dW[i][r][c];
+            }
         }
-    }
-
-    for(size_t i=0;i<output.weights.size();i++){
-        for(size_t j=0;j<output.weights[0].size();j++){
-            output.weights[i][j] -= alpha*grads.dW2[i][j];
+        // b = b - alpha * db
+        for (size_t j = 0; j < layers[i].biases.size(); ++j) {
+            layers[i].biases[j] -= alpha * grads.db[i][j];
         }
-    }
-
-    for(size_t i=0; i<hidden.biases.size(); i++){
-        hidden.biases[i] -= alpha * grads.db1[i];
-    }
-
-    for(size_t i=0; i<output.biases.size(); i++){
-        output.biases[i] -= alpha * grads.db2[i];
     }
 }
 
@@ -195,7 +214,7 @@ void NeuralNetwork::update_weights(Gradients& grads, const float alpha){
 
 int NeuralNetwork::predict(const vector<float>& X){
     ForwardCache cache = forward_prop(X);
-    return argmax(cache.a2);
+    return argmax(cache.a.back());
 }
 
 
