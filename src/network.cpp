@@ -1,5 +1,11 @@
 #include "../include/network.h"
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+#include <numeric>  // for iota
+#include <algorithm> // for shuffle, min
 
 //helper,
 vector<float> column_sum(const vector<vector<float>>& mat) {
@@ -16,6 +22,38 @@ vector<float> column_sum(const vector<vector<float>>& mat) {
     }
 
     return result;
+}
+
+
+// Mini-batch gradient helpers
+static Gradients zero_gradients(const vector<Layer>& layers) {
+    Gradients g;
+    g.dW.resize(layers.size());
+    g.db.resize(layers.size());
+    for (size_t i = 0; i < layers.size(); ++i) {
+        g.dW[i] = vector<vector<float>>(layers[i].weights.size(),
+                          vector<float>(layers[i].weights[0].size(), 0.0f));
+        g.db[i] = vector<float>(layers[i].biases.size(), 0.0f);
+    }
+    return g;
+}
+
+static void accumulate_gradients(Gradients& dst, const Gradients& src) {
+    for (size_t i = 0; i < dst.dW.size(); ++i) {
+        for (size_t r = 0; r < dst.dW[i].size(); ++r)
+            for (size_t c = 0; c < dst.dW[i][r].size(); ++c)
+                dst.dW[i][r][c] += src.dW[i][r][c];
+        for (size_t j = 0; j < dst.db[i].size(); ++j)
+            dst.db[i][j] += src.db[i][j];
+    }
+}
+
+static void scale_gradients(Gradients& g, float scale) {
+    for (auto& layer_dW : g.dW)
+        for (auto& row : layer_dW)
+            for (float& v : row) v *= scale;
+    for (auto& layer_db : g.db)
+        for (float& v : layer_db) v *= scale;
 }
 
 
@@ -157,7 +195,7 @@ Gradients NeuralNetwork::backward_prop(const vector<float>& X, const ForwardCach
     grads.db.resize(layers.size());
 
     int num_layers = layers.size();
-    int num_classes = layers.back().weights.size(); //output layer size
+    int num_classes = (int)layers.back().weights.size(); //output layer size
 
     vector<float> dZ = cache.a.back(); // a[L] = output activations
     dZ[correct_label] -= 1.0f; // dL/dZ = A - Y_one_hot
@@ -229,20 +267,44 @@ float NeuralNetwork::get_accuracy(const vector<Train_data>& dataset){
 
 
 
-void NeuralNetwork::gradient_descent(const vector<Train_data>& train_data, 
-    const float alpha, const int num_epochs, const vector<Train_data>& val_data){
+void NeuralNetwork::gradient_descent(const vector<Train_data>& train_data,
+    const float alpha, const int num_epochs, const vector<Train_data>& val_data,
+    int batch_size){
 
-    for(int epoch=0;epoch<num_epochs;epoch++){
-        for(const auto& sample: train_data){
-            ForwardCache fcache = forward_prop(sample.image);
-            Gradients grads = backward_prop(sample.image, fcache, sample.label);
-            update_weights(grads, alpha);
+    size_t n = train_data.size();
+    vector<int> indices(n);
+    iota(indices.begin(), indices.end(), 0);
+
+    for(int epoch=0; epoch<num_epochs; epoch++){
+        shuffle(indices.begin(), indices.end(), mt19937(random_device{}()));
+
+        // Mini-batch gradient descent with OpenMP parallelization
+        for (size_t batch_start = 0; batch_start < n; batch_start += batch_size) {
+            size_t batch_end = std::min(batch_start + batch_size, n);
+            size_t batch_sz = batch_end - batch_start;
+
+            Gradients batch_grads = zero_gradients(layers);
+
+            #pragma omp parallel for schedule(dynamic)
+            for (size_t idx = batch_start; idx < batch_end; ++idx) {
+                const auto& sample = train_data[indices[idx]];
+                ForwardCache fcache = forward_prop(sample.image);
+                Gradients grads = backward_prop(sample.image, fcache, sample.label);
+
+                // Thread-local accumulation (critical section for thread safety)
+                #pragma omp critical
+                accumulate_gradients(batch_grads, grads);
+            }
+
+            // Average gradients over batch
+            scale_gradients(batch_grads, 1.0f / batch_sz);
+            update_weights(batch_grads, alpha);
         }
 
-        //log accuracy for every 10 epochs
+        // Log accuracy for every 10 epochs
         if (!val_data.empty() && (epoch + 1) % 10 == 0) {
             float acc = get_accuracy(val_data);
-            cout << "Epoch " << (epoch + 1) << " | Val Accuracy: " 
+            cout << "Epoch " << (epoch + 1) << " | Val Accuracy: "
                  << (acc * 100.0f) << "%" << endl;
         }
     }

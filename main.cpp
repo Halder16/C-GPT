@@ -29,8 +29,8 @@ int main(){
 
     NeuralNetwork nn;
     nn.add_layer(784, 128);
-    nn.add_layer(64);
-    nn.add_layer(32);
+    // nn.add_layer(64);
+    // nn.add_layer(32);
     nn.add_layer(10);
 
     nn.gradient_descent(train_data, 0.01f, 100, val_data);
@@ -40,10 +40,11 @@ int main(){
 
 
 /*
-TODO: add the capability to add more layers, and for the 
-neural network to handle them dynamically (buzzword alert!) 
-instead of hardcoding the layer operations. 
-
-That way, you could easily build models with 
-different layers and test them
+accuracy achieved at last epoch:
+1. with a single hidden [784->128->10] layer -> 98.23 (97.54 on latest)
+2. [784->32->10] -> 96.59
+3. [784->64->10] -> 97.37
+4. [784->256->10] -> 97.81
+5. [784->128->64->10] -> 97.79
+6. with [784->64->32>10] layers -> 97.91
 */
